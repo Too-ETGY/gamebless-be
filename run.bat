@@ -1,0 +1,3 @@
+@echo off
+echo Starting Gamebless API server...
+uvicorn app.main:app --reload
