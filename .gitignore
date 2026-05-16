@@ -142,3 +142,6 @@ logs/
 
 # FastAPI/Uvicorn
 uvicorn.log
+
+# Other
+chroma_db/

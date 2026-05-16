@@ -4,8 +4,8 @@ from datetime import datetime, timezone, timezone
 from enum import Enum
 
 class Gender(str, Enum):
-    MALE = "L"
-    FEMALE = "P"
+    MALE = "M"
+    FEMALE = "F"
     NONE = None
 
 class UserProfile(BaseModel):
