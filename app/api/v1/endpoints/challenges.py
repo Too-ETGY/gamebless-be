@@ -1,52 +1,55 @@
 from fastapi import APIRouter, Depends
 from app.dependencies import get_current_user
-from app.schemas.challenge import (
-    DailyChallengesResponse,
-    AllChallengesResponse,
-    CompleteTaskResponse,
-)
+from app.db.firebase import get_firestore
+from app.db.repositories.challenge_repo import ChallengeRepository
+from app.db.repositories.progress_repo import ProgressRepository
+from app.db.repositories.user_repo import UserRepository
+from app.services.challenge_service import ChallengeService
+from app.schemas.challenge import AllChallengesResponse, CompleteChallengeResponse, ChallengeHistoryResponse
 from app.core.response import success_response
 
 router = APIRouter()
 
 
-@router.get("/daily", response_model=DailyChallengesResponse)
-async def get_daily_challenges(
-    # current_user: dict = Depends(get_current_user),
-):
-    """
-    Returns today's challenge tasks (video, article, exercise).
-    Document ID in Firestore is today's date: "YYYY-MM-DD".
-    """
-    # TODO: ChallengeService.get_daily()
-    return success_response(data=None, message="Daily challenges endpoint ready")
+def get_challenge_service() -> ChallengeService:
+    db = get_firestore()
+    return ChallengeService(ChallengeRepository(db), ProgressRepository(db), UserRepository(db))
 
 
 @router.get("", response_model=AllChallengesResponse)
 async def get_all_challenges(
-    # current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
+    service: ChallengeService = Depends(get_challenge_service),
 ):
     """
-    Returns all available challenge documents.
-    Useful for browsing past or upcoming challenges.
+    Returns all challenges marked with is_completed based on today's progress.
     """
-    # TODO: ChallengeService.get_all()
-    return success_response(data=None, message="All challenges endpoint ready")
+    data = service.get_all(current_user["uid"])
+    return success_response(data=data, message="Challenges fetched")
 
 
-@router.post("/{task_id}/complete", response_model=CompleteTaskResponse)
+@router.post("/{task_id}/complete", response_model=CompleteChallengeResponse)
 async def complete_challenge(
     task_id: str,
-    # current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
+    service: ChallengeService = Depends(get_challenge_service),
 ):
     """
-    Marks a challenge task as completed.
-
-    Flow:
-    - Verify task exists in today's challenges
-    - Check not already completed by this user today
-    - Add task_id to user_progress.completed_challenges
-    - Add point_value to today_points_earned and account_stats.total_points
+    Marks a challenge as completed.
+    Deduplication check prevents point farming.
+    Awards points to account_stats.total_points atomically.
     """
-    # TODO: ChallengeService.complete(task_id, uid)
-    return success_response(data=None, message="Complete challenge endpoint ready")
+    data = service.complete(current_user["uid"], task_id)
+    return success_response(data=data, message="Challenge completed")
+
+
+@router.get("/history", response_model=ChallengeHistoryResponse)
+async def get_challenge_history(
+    current_user: dict = Depends(get_current_user),
+    service: ChallengeService = Depends(get_challenge_service),
+):
+    """
+    All completed challenges across all time + total_points from account_stats.
+    """
+    data = service.get_history(current_user["uid"])
+    return success_response(data=data, message="Challenge history fetched")

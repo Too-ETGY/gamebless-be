@@ -1,15 +1,14 @@
+from enum import Enum
 from pydantic import BaseModel
-from typing import List
 
+class ChallengeType(str, Enum):
+    video = "video"
+    article = "article"
+    funfact = "funfact"
 
 class ChallengeTask(BaseModel):
     task_id: str
-    type: str                       # "video" | "article" | "exercise"
-    content_url: str
+    type: ChallengeType
+    content_url: str = None
     point_value: int
-    description: str
-
-
-class DailyChallenge(BaseModel):
-    date: str                       # document ID format: "YYYY-MM-DD"
-    tasks: List[ChallengeTask]
+    question: str = None
