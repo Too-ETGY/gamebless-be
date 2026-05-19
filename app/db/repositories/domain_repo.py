@@ -14,18 +14,15 @@ class DomainRepository:
         self.collection = db.collection(BLOCKED_DOMAINS_COLLECTION)
 
     def _normalize(self, url: str) -> str:
-        """Strip protocol, www, trailing slash. Returns clean domain string."""
         domain = url.lower().strip()
         for prefix in ["https://", "http://", "www."]:
             domain = domain.removeprefix(prefix)
-        domain = domain.split("/")[0]   # remove any path
-        return domain
+        return domain.split("/")[0]
 
     def _hash(self, domain: str) -> str:
         return hashlib.md5(domain.encode()).hexdigest()
 
     def get_by_url(self, url: str) -> dict | None:
-        """Exact match lookup by normalized domain."""
         domain = self._normalize(url)
         doc = self.collection.document(self._hash(domain)).get()
         if not doc.exists:
@@ -33,13 +30,10 @@ class DomainRepository:
         return {"id": doc.id, **doc.to_dict()}
 
     def save(self, url: str, reasoning: str) -> dict:
-        """Save a confirmed blocked domain into Firestore."""
         domain = self._normalize(url)
         doc_id = self._hash(domain)
-        data = {
-            "domain": domain,
-            "reasoning": reasoning,
-        }
+        blocked = BlockedDomain(domain=domain, reasoning=reasoning)
+        data = blocked.model_dump()
         self.collection.document(doc_id).set(data)
         logger.info(f"Saved blocked domain: {domain} — {reasoning}")
         return {"id": doc_id, **data}

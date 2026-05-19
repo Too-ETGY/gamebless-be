@@ -3,7 +3,7 @@ from app.dependencies import get_current_user
 from app.db.firebase import get_firestore
 from app.db.repositories.user_repo import UserRepository
 from app.services.user_service import UserService
-from app.schemas.user import SyncRequest, SyncResponse
+from app.schemas.auth import SyncRequest, SyncResponse
 from app.core.response import success_response
 
 router = APIRouter()
@@ -24,5 +24,5 @@ async def sync_user(
     Creates a minimal user document — everything except email and join_date is null/0.
     If user already exists, returns existing profile without overwriting.
     """
-    profile = service.sync(current_user["uid"], body.email, body.avatar_url)
+    profile = service.sync(current_user["uid"], body.email)
     return success_response(data=profile, message="User synced successfully")

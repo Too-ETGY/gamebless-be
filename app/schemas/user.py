@@ -7,17 +7,11 @@ from app.schemas.common import ApiResponse
 
 # ── Requests ──────────────────────────────────────────────────────────────────
 
-class SyncRequest(BaseModel):
-    """POST /auth/sync — called by Firebase on first login. Creates user document."""
-    email: EmailStr
-    avatar_url: Optional[str] = None    # from Google OAuth
-
-
 class UpdateProfileRequest(BaseModel):
     """PUT /users/me — user fills in their profile."""
     username: Optional[str] = None
     full_name: Optional[str] = None
-    birth_date: Optional[date] = None
+    birth_date: Optional[datetime] = None
     gender: Optional[Gender] = None
     occupation: Optional[str] = None
     avatar_url: Optional[str] = None
@@ -30,7 +24,7 @@ class ProfileData(BaseModel):
     email: EmailStr
     username: Optional[str] = None
     full_name: Optional[str] = None
-    birth_date: Optional[date] = None
+    birth_date: Optional[datetime] = None
     gender: Optional[Gender] = None
     occupation: Optional[str] = None
     avatar_url: Optional[str] = None
@@ -50,7 +44,6 @@ class MeData(BaseModel):
 
 # ── Composed Responses ────────────────────────────────────────────────────────
 
-SyncResponse = ApiResponse[ProfileData]
 MeResponse = ApiResponse[MeData]
 UpdateProfileResponse = ApiResponse[ProfileData]
 

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from app.db.repositories.user_repo import UserRepository
+from app.schemas.auth import SyncData
 from app.schemas.user import ProfileData, AccountStatsData, MeData
 from app.core.exceptions import AppException
 import logging
@@ -11,15 +12,23 @@ class UserService:
     def __init__(self, repo: UserRepository):
         self.repo = repo
 
-    def sync(self, uid: str, email: str, avatar_url: str | None) -> ProfileData:
+    def sync(self, uid: str, email: str) -> SyncData:
         existing = self.repo.get_by_id(uid)
         if existing:
             logger.info(f"Sync called for existing user: {uid}")
-            return self._to_profile(uid, existing["profile"])
+            return SyncData(
+                is_new_user=False,
+                profile=self._to_profile(uid, existing["profile"]),
+                account_stats=AccountStatsData(**existing["account_stats"]),
+            )
         now = datetime.now(timezone.utc)
-        doc = self.repo.create(uid, email, avatar_url, now)
+        doc = self.repo.create(uid, email, now)
         logger.info(f"New user created: {uid}")
-        return self._to_profile(uid, doc["profile"])
+        return SyncData(
+            is_new_user=True,
+            profile=self._to_profile(uid, existing["profile"]),
+            account_stats=AccountStatsData(**doc['account_stats']),
+        )
 
     def get_me(self, uid: str) -> MeData:
         doc = self.repo.get_by_id(uid)

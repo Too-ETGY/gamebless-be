@@ -1,20 +1,16 @@
-import google.generativeai as genai
+from google import genai
+
 from app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
 
-_configured = False
-
-
-def _ensure_configured():
-    global _configured
-    if not _configured:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        _configured = True
+_client = None
 
 
 def get_llm():
-    """Return Gemini Flash — used only for scrape analysis in /report."""
-    _ensure_configured()
-    return genai.GenerativeModel("gemini-2.5-flash")
+    """Return a configured Gemini client for scrape analysis in /report."""
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _client

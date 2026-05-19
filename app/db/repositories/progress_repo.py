@@ -1,5 +1,5 @@
 from google.cloud.firestore_v1 import Client
-from google.cloud.firestore_v1 import Increment, ArrayUnion
+from google.cloud.firestore import Increment, ArrayUnion
 from datetime import datetime, timezone
 import logging
 
@@ -22,6 +22,14 @@ class ProgressRepository:
             .document(date_str)
         )
 
+    def _subcollection(self, uid: str):
+        return (
+            self.db
+            .collection(USERS_COLLECTION)
+            .document(uid)
+            .collection(PROGRESS_SUBCOLLECTION)
+        )
+
     def get_by_date(self, uid: str, date_str: str) -> dict | None:
         doc = self._ref(uid, date_str).get()
         if not doc.exists:
@@ -31,31 +39,29 @@ class ProgressRepository:
     def get_range(self, uid: str, from_date: str, to_date: str) -> list[dict]:
         """
         Fetch all progress documents between two dates (inclusive).
-        Returns only documents that exist — caller handles missing days.
+        Uses start_at/end_at on document references — correct way to
+        filter subcollection documents by ID range in Firestore.
         """
+        subcol = self._subcollection(uid)
+
+        from_ref = self._ref(uid, from_date)
+        to_ref = self._ref(uid, to_date)
+
         docs = (
-            self.db
-            .collection(USERS_COLLECTION)
-            .document(uid)
-            .collection(PROGRESS_SUBCOLLECTION)
-            .where("__name__", ">=", from_date)
-            .where("__name__", "<=", to_date)
+            subcol
+            .order_by("__name__")
+            .start_at(from_ref)
+            .end_at(to_ref)
             .stream()
         )
         return [{"date": doc.id, **doc.to_dict()} for doc in docs]
 
     def record_attempt(self, uid: str, date_str: str) -> dict:
-        """
-        Atomically increment access_attempts_count.
-        Creates the document if it doesn't exist yet (merge=True).
-        Also sets streak_maintained = False.
-        """
         ref = self._ref(uid, date_str)
         ref.set({
             "access_attempts_count": Increment(1),
             "streak_maintained": False,
             "updated_at": datetime.now(timezone.utc),
-            # defaults for new doc
             "completed_challenges": [],
             "challenges_by_type": {},
         }, merge=True)
@@ -69,24 +75,17 @@ class ProgressRepository:
         task_id: str,
         challenge_type: str,
     ) -> dict:
-        """
-        Append task_id to completed_challenges and increment challenges_by_type.
-        Creates document if it doesn't exist yet.
-        """
         ref = self._ref(uid, date_str)
         ref.set({
             "completed_challenges": ArrayUnion([task_id]),
             f"challenges_by_type.{challenge_type}": Increment(1),
-            "streak_maintained": True,
             "updated_at": datetime.now(timezone.utc),
-            # defaults for new doc
             "access_attempts_count": 0,
         }, merge=True)
         updated = ref.get()
         return {"date": updated.id, **updated.to_dict()}
 
     def is_challenge_completed(self, uid: str, date_str: str, task_id: str) -> bool:
-        """Deduplication check before awarding points."""
         doc = self.get_by_date(uid, date_str)
         if doc is None:
             return False

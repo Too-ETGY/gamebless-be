@@ -1,6 +1,7 @@
 from google.cloud.firestore_v1 import Client
-from google.cloud.firestore_v1 import Increment
-from datetime import datetime, timezone
+from google.cloud.firestore import Increment
+from datetime import datetime
+from app.models.user import UserProfile, AccountStats
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,24 +22,15 @@ class UserRepository:
 
     def create(self, uid: str, email: str, avatar_url: str | None, join_date: datetime) -> dict:
         """
-        First-time sync. Creates minimal user document.
-        Everything except email, avatar_url, and join_date is null/0.
+        Uses UserProfile and AccountStats models to construct the document.
+        Defaults are guaranteed by the models — no manual field listing needed.
         """
+        profile = UserProfile(email=email, avatar_url=avatar_url)
+        stats = AccountStats(join_date=join_date)
+
         data = {
-            "profile": {
-                "email": email,
-                "avatar_url": avatar_url,
-                "username": None,
-                "full_name": None,
-                "birth_date": None,
-                "gender": None,
-                "occupation": None,
-            },
-            "account_stats": {
-                "total_points": 0,
-                "current_streak": 0,
-                "join_date": join_date,
-            }
+            "profile": profile.model_dump(),
+            "account_stats": stats.model_dump(),
         }
         self.collection.document(uid).set(data)
         logger.info(f"Created user document: {uid}")
@@ -54,15 +46,12 @@ class UserRepository:
         """Atomically add points. Returns updated total."""
         ref = self.collection.document(uid)
         ref.update({"account_stats.total_points": Increment(points)})
-        updated = ref.get().to_dict()
-        return updated["account_stats"]["total_points"]
+        return ref.get().to_dict()["account_stats"]["total_points"]
 
     def reset_streak(self, uid: str) -> None:
-        """Called when user attempts to access a gambling site."""
         self.collection.document(uid).update({"account_stats.current_streak": 0})
 
     def increment_streak(self, uid: str) -> None:
-        """Called by a scheduled job (future) or manually."""
         self.collection.document(uid).update(
             {"account_stats.current_streak": Increment(1)}
         )

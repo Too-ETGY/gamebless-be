@@ -72,7 +72,7 @@ Navigation Links: {signals.get('navigation', 'N/A')}
 Footer Text: {signals.get('footer', 'N/A')}
 Button Text: {signals.get('buttons', 'N/A')}
 
-Common gambling indicators in Indonesian sites: slot, togel, casino, poker, betting, taruhan, daftar (register), deposit, withdraw, bonus, jackpot, RTP, provider (Pragmatic, PG Soft, Habanero).
+Common gambling indicators in Indonesian sites: slot, togel, casino, poker, betting, taruhan, deposit, withdraw, bonus, jackpot, RTP, zeus, petir, 999, provider (Pragmatic, PG Soft, Habanero).
 
 Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
 {{
@@ -82,8 +82,29 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
 """
 
     try:
-        response = model.generate_content(prompt)
-        raw = response.text.strip()
+        response = model.models.generate_content(
+            model="gemini-2.5-flash",
+            contents={"text": prompt},
+            config={
+                "temperature": 0,
+                "top_p": 0.0,
+                "top_k": 1,
+            },
+        )
+
+        if hasattr(response, "text"):
+            raw = response.text.strip()
+        else:
+            raw = ""
+            output = getattr(response, "output", None)
+            if output:
+                first_output = output[0]
+                content = getattr(first_output, "content", None)
+                if content:
+                    first_content = content[0]
+                    raw = getattr(first_content, "text", "").strip()
+
+        raw = raw.strip()
 
         # Strip markdown fences if model adds them
         if raw.startswith("```"):
