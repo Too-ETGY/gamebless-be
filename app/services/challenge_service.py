@@ -17,11 +17,15 @@ class ChallengeService:
 
     def get_all(self, uid: str) -> AllChallengesData:
         today = date.today().isoformat()
-        progress = self.progress_repo.get_by_date(uid, today)
+        progress = self.progress_repo.get_by_date(uid, today) # wrong, it's completed by all the time
         completed_today = set(progress.get("completed_challenges", []) if progress else [])
         challenges = self.challenge_repo.get_all()
-        tasks = [ChallengeTaskData(**c, is_completed=c["task_id"] in completed_today) for c in challenges]
+        tasks = [ChallengeTaskData(**c, is_completed=c["task_id"] in completed_today) for c in challenges] # means this might not be giving the right tag for is_completed
         return AllChallengesData(challenges=tasks, total=len(tasks))
+    
+    def get_challange_by_id(self, uid: str, task_id: str) -> ChallengeTaskData:
+        task = self.challenge_repo.get_by_id(task_id)
+        return ChallengeTaskData(task)
 
     def complete(self, uid: str, task_id: str) -> CompleteChallengeData:
         task = self.challenge_repo.get_by_id(task_id)

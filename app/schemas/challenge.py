@@ -32,7 +32,7 @@ class ChallengeHistoryData(BaseModel):
 
 
 # ── Composed Responses ────────────────────────────────────────────────────────
-
+ChallengeResponse = ApiResponse[ChallengeTaskData]
 AllChallengesResponse = ApiResponse[AllChallengesData]
 CompleteChallengeResponse = ApiResponse[CompleteChallengeData]
 ChallengeHistoryResponse = ApiResponse[ChallengeHistoryData]

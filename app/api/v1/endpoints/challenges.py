@@ -5,7 +5,7 @@ from app.db.repositories.challenge_repo import ChallengeRepository
 from app.db.repositories.progress_repo import ProgressRepository
 from app.db.repositories.user_repo import UserRepository
 from app.services.challenge_service import ChallengeService
-from app.schemas.challenge import AllChallengesResponse, CompleteChallengeResponse, ChallengeHistoryResponse
+from app.schemas.challenge import ChallengeResponse, AllChallengesResponse, CompleteChallengeResponse, ChallengeHistoryResponse
 from app.core.response import success_response
 
 router = APIRouter()
@@ -28,6 +28,15 @@ async def get_all_challenges(
     return success_response(data=data, message="Challenges fetched")
 
 
+@router.get("/{task_id}/", response_model=ChallengeResponse)
+async def get_a_challanges(
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+    service: ChallengeService = Depends(get_challenge_service),
+):
+    data = service.get_challange_by_id(current_user["uid"], task_id)
+    return success_response(data=data, message="Challenge {task_id} fethced")
+
 @router.post("/{task_id}/complete", response_model=CompleteChallengeResponse)
 async def complete_challenge(
     task_id: str,
@@ -41,7 +50,6 @@ async def complete_challenge(
     """
     data = service.complete(current_user["uid"], task_id)
     return success_response(data=data, message="Challenge completed")
-
 
 @router.get("/history", response_model=ChallengeHistoryResponse)
 async def get_challenge_history(
