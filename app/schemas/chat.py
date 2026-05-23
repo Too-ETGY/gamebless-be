@@ -1,33 +1,48 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
+from app.models.chat import SenderType
 from app.schemas.common import ApiResponse
 
 
 # ── Requests ──────────────────────────────────────────────────────────────────
 
 class SendMessageRequest(BaseModel):
-    message: str
-    session_id: Optional[str] = None    # if None, backend creates a new session
+    content: str
 
 
 # ── Response Data ─────────────────────────────────────────────────────────────
 
-class ChatMessageData(BaseModel):
+class SessionData(BaseModel):
     session_id: str
-    message_id: str                     # auto-generated Firestore doc ID
-    message: str
-    sender: str                         # "user" | "ai"
+    title: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    message_count: int
+    summary: Optional[str] = None
+
+
+class MessageData(BaseModel):
+    message_id: str
+    session_id: str
+    sender: SenderType
+    content: str
     timestamp: datetime
 
 
 class SendMessageData(BaseModel):
-    session_id: str
-    user_message: ChatMessageData
-    # AI response is written to Firestore directly — Flutter listens via StreamBuilder
-    # No ai_message here intentionally — frontend gets it via Firestore listener
+    user_message: MessageData
+    ai_message: MessageData
+
+
+class MessageListData(BaseModel):
+    messages: List[MessageData]
+    total: int
+    has_summary: bool       # True if older messages were summarized
 
 
 # ── Composed Responses ────────────────────────────────────────────────────────
 
 SendMessageResponse = ApiResponse[SendMessageData]
+SessionListResponse = ApiResponse[SessionData]
+MessageListResponse = ApiResponse[MessageListData]

@@ -1,5 +1,6 @@
 from google.cloud.firestore_v1 import Client
-from google.cloud.firestore import Increment, ArrayUnion
+from google.cloud.firestore import Increment
+from app.models.progress import UserProgress
 from datetime import datetime, timezone
 import logging
 
@@ -37,59 +38,35 @@ class ProgressRepository:
         return {"date": doc.id, **doc.to_dict()}
 
     def get_range(self, uid: str, from_date: str, to_date: str) -> list[dict]:
-        """
-        Fetch all progress documents between two dates (inclusive).
-        Uses start_at/end_at on document references — correct way to
-        filter subcollection documents by ID range in Firestore.
-        """
-        subcol = self._subcollection(uid)
-
-        from_ref = self._ref(uid, from_date)
-        to_ref = self._ref(uid, to_date)
-
-        docs = (
-            subcol
-            .order_by("__name__")
-            .start_at(from_ref)
-            .end_at(to_ref)
-            .stream()
-        )
-        return [{"date": doc.id, **doc.to_dict()} for doc in docs]
+        docs = self._subcollection(uid).stream()
+        return [
+            {"date": doc.id, **doc.to_dict()}
+            for doc in docs
+            if from_date <= doc.id <= to_date
+        ]
 
     def record_attempt(self, uid: str, date_str: str) -> dict:
+        """
+        Creates or increments today's attempt document.
+        Uses UserProgress model for first-time creation shape.
+        """
         ref = self._ref(uid, date_str)
-        ref.set({
-            "access_attempts_count": Increment(1),
-            "streak_maintained": False,
-            "updated_at": datetime.now(timezone.utc),
-            "completed_challenges": [],
-            "challenges_by_type": {},
-        }, merge=True)
+        existing = ref.get()
+
+        if not existing.exists:
+            progress = UserProgress(
+                attempt_count=1,
+                last_attempt_at=datetime.now(timezone.utc),
+            )
+            ref.set(progress.model_dump())
+        else:
+            ref.update({
+                "attempt_count": Increment(1),
+                "last_attempt_at": datetime.now(timezone.utc),
+            })
+
         updated = ref.get()
         return {"date": updated.id, **updated.to_dict()}
-
-    def complete_challenge(
-        self,
-        uid: str,
-        date_str: str,
-        task_id: str,
-        challenge_type: str,
-    ) -> dict:
-        ref = self._ref(uid, date_str)
-        ref.set({
-            "completed_challenges": ArrayUnion([task_id]),
-            f"challenges_by_type.{challenge_type}": Increment(1),
-            "updated_at": datetime.now(timezone.utc),
-            "access_attempts_count": 0,
-        }, merge=True)
-        updated = ref.get()
-        return {"date": updated.id, **updated.to_dict()}
-
-    def is_challenge_completed(self, uid: str, date_str: str, task_id: str) -> bool:
-        doc = self.get_by_date(uid, date_str)
-        if doc is None:
-            return False
-        return task_id in doc.get("completed_challenges", [])
 
 
 def get_progress_repository(db: Client) -> ProgressRepository:

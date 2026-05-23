@@ -5,7 +5,8 @@ from app.db.repositories.challenge_repo import ChallengeRepository
 from app.db.repositories.progress_repo import ProgressRepository
 from app.db.repositories.user_repo import UserRepository
 from app.services.challenge_service import ChallengeService
-from app.schemas.challenge import AllChallengesResponse, CompleteChallengeResponse, ChallengeHistoryResponse
+from app.schemas.challenge import ChallengeResponse, AllChallengesResponse, CompleteChallengeResponse, ChallengeHistoryResponse
+from app.models.challenge import ChallengeType
 from app.core.response import success_response
 
 router = APIRouter()
@@ -13,7 +14,7 @@ router = APIRouter()
 
 def get_challenge_service() -> ChallengeService:
     db = get_firestore()
-    return ChallengeService(ChallengeRepository(db), ProgressRepository(db), UserRepository(db))
+    return ChallengeService(ChallengeRepository(db))
 
 
 @router.get("", response_model=AllChallengesResponse)
@@ -27,6 +28,24 @@ async def get_all_challenges(
     data = service.get_all(current_user["uid"])
     return success_response(data=data, message="Challenges fetched")
 
+@router.get("/{task_id}/", response_model=ChallengeResponse)
+async def get_challenges(
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+    service: ChallengeService = Depends(get_challenge_service),
+):
+    data = service.get_by_id(current_user["uid"], task_id)
+    return success_response(data=data, message="Challenges {task_id} fetched")
+
+
+@router.get("/by-type/{type}", response_model=AllChallengesResponse)
+async def get_challenges_by_type(
+    type: ChallengeType,
+    current_user: dict = Depends(get_current_user),
+    service: ChallengeService = Depends(get_challenge_service),
+):
+    data = service.get_by_type(current_user["uid"], type)
+    return success_response(data=data, message="Challenges fetced by type")
 
 @router.post("/{task_id}/complete", response_model=CompleteChallengeResponse)
 async def complete_challenge(
@@ -41,7 +60,6 @@ async def complete_challenge(
     """
     data = service.complete(current_user["uid"], task_id)
     return success_response(data=data, message="Challenge completed")
-
 
 @router.get("/history", response_model=ChallengeHistoryResponse)
 async def get_challenge_history(
