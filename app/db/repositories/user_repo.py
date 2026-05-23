@@ -18,7 +18,34 @@ class UserRepository:
         doc = self.collection.document(uid).get()
         if not doc.exists:
             return None
-        return {"id": doc.id, **doc.to_dict()}
+        
+        data = doc.to_dict()
+        
+        # Handle legacy user documents that lack the new nested structure
+        if "profile" not in data:
+            # Assume everything was at the root
+            data["profile"] = {k: v for k, v in data.items() if k != "account_stats"}
+            
+        if "account_stats" not in data:
+            from datetime import timezone
+            join_date = data["profile"].get("join_date", data.get("join_date"))
+            
+            # Convert string to datetime if needed, or use now
+            if isinstance(join_date, str):
+                try:
+                    join_date = datetime.fromisoformat(join_date.replace("Z", "+00:00"))
+                except ValueError:
+                    join_date = datetime.now(timezone.utc)
+            elif not join_date:
+                join_date = datetime.now(timezone.utc)
+                
+            data["account_stats"] = {
+                "total_points": 0,
+                "current_streak": 0,
+                "join_date": join_date
+            }
+
+        return {"id": doc.id, **data}
 
     def create(self, uid: str, email: str, avatar_url: str | None, join_date: datetime) -> dict:
         """

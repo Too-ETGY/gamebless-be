@@ -22,11 +22,11 @@ class UserService:
                 account_stats=AccountStatsData(**existing["account_stats"]),
             )
         now = datetime.now(timezone.utc)
-        doc = self.repo.create(uid, email, now)
+        doc = self.repo.create(uid, email, avatar_url=None, join_date=now)
         logger.info(f"New user created: {uid}")
         return SyncData(
             is_new_user=True,
-            profile=self._to_profile(uid, existing["profile"]),
+            profile=self._to_profile(uid, doc["profile"]),
             account_stats=AccountStatsData(**doc['account_stats']),
         )
 
