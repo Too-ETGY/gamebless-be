@@ -1,18 +1,15 @@
 from pydantic import BaseModel
-from typing import List, Optional
-from app.models.challenge import ChallengeType
+from typing import List
+from datetime import datetime
+from app.models.challenge import ChallengeType, ChallengeTask
 from app.schemas.common import ApiResponse
 
 
 # ── Response Data ─────────────────────────────────────────────────────────────
 
-class ChallengeTaskData(BaseModel):
+class ChallengeTaskData(ChallengeTask):
     task_id: str
-    type: ChallengeType
-    content_url: Optional[str] = None
-    point_value: int
-    question: Optional[str] = None
-    is_completed: bool = False          # marked per user at query time
+    is_completed: bool = False
 
 
 class AllChallengesData(BaseModel):
@@ -23,16 +20,27 @@ class AllChallengesData(BaseModel):
 class CompleteChallengeData(BaseModel):
     task_id: str
     points_awarded: int
-    total_points: int                   # updated account_stats.total_points
+    total_points: int
+
+
+class CompletedChallengeData(BaseModel):
+    """Lightweight — option B history, no full task details."""
+    task_id: str
+    type: ChallengeType
+    points_awarded: int
+    completed_at: datetime
 
 
 class ChallengeHistoryData(BaseModel):
-    completed_challenges: List[ChallengeTaskData]
-    total_points: int                   # from account_stats directly
+    completed_challenges: List[CompletedChallengeData]
+    total_points: int
+    total_completed: int
 
 
 # ── Composed Responses ────────────────────────────────────────────────────────
-ChallengeResponse = ApiResponse[ChallengeTaskData]
+
+ChallengeResponse = ApiResponse[ChallengeTask]
 AllChallengesResponse = ApiResponse[AllChallengesData]
+ChallengeTaskResponse = ApiResponse[ChallengeTaskData]
 CompleteChallengeResponse = ApiResponse[CompleteChallengeData]
 ChallengeHistoryResponse = ApiResponse[ChallengeHistoryData]

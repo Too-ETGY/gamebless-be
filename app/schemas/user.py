@@ -1,43 +1,32 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import date, datetime
-from app.models.user import Gender
+from datetime import datetime
+from app.models.user import Gender, UserProfile
 from app.schemas.common import ApiResponse
 
 
 # ── Requests ──────────────────────────────────────────────────────────────────
 
 class UpdateProfileRequest(BaseModel):
-    """PUT /users/me — user fills in their profile."""
     username: Optional[str] = None
     full_name: Optional[str] = None
     birth_date: Optional[datetime] = None
     gender: Optional[Gender] = None
     occupation: Optional[str] = None
-    avatar_url: Optional[str] = None
 
 
 # ── Response Data ─────────────────────────────────────────────────────────────
 
-class ProfileData(BaseModel):
+class ProfileData(UserProfile):
     uid: str
-    email: EmailStr
-    username: Optional[str] = None
-    full_name: Optional[str] = None
-    birth_date: Optional[datetime] = None
-    gender: Optional[Gender] = None
-    occupation: Optional[str] = None
-    avatar_url: Optional[str] = None
-
 
 class AccountStatsData(BaseModel):
     total_points: int
     current_streak: int
-    join_date: datetime
+    days_since_joined: int
 
 
 class MeData(BaseModel):
-    """Full snapshot — profile + stats. Used by GET /users/me."""
     profile: ProfileData
     account_stats: AccountStatsData
 
@@ -50,4 +39,4 @@ UpdateProfileResponse = ApiResponse[ProfileData]
 
 class AttemptRequest(BaseModel):
     """POST /users/attempts — frontend calls this when /check returns is_blocked=true."""
-    url: str
+    url: Optional[str] = None

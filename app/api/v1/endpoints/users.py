@@ -3,6 +3,7 @@ from app.dependencies import get_current_user
 from app.db.firebase import get_firestore
 from app.db.repositories.user_repo import UserRepository
 from app.db.repositories.progress_repo import ProgressRepository
+from app.db.repositories.challenge_repo import ChallengeRepository
 from app.services.user_service import UserService
 from app.services.progress_service import ProgressService
 from app.schemas.user import MeResponse, UpdateProfileRequest, UpdateProfileResponse, AttemptRequest
@@ -13,12 +14,13 @@ router = APIRouter()
 
 
 def get_user_service() -> UserService:
-    return UserService(UserRepository(get_firestore()))
+    db = get_firestore()
+    return UserService(UserRepository(db), ProgressRepository(db), ChallengeRepository(db))
 
 
 def get_progress_service() -> ProgressService:
     db = get_firestore()
-    return ProgressService(ProgressRepository(db), UserRepository(db))
+    return ProgressService(ProgressRepository(db), UserRepository(db), ChallengeRepository(db))
 
 
 @router.get("/me", response_model=MeResponse)

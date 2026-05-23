@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends
 from app.dependencies import get_current_user
 from app.db.firebase import get_firestore
 from app.db.repositories.user_repo import UserRepository
+from app.db.repositories.progress_repo import ProgressRepository
+from app.db.repositories.challenge_repo import ChallengeRepository
 from app.services.user_service import UserService
 from app.schemas.auth import SyncRequest, SyncResponse
 from app.core.response import success_response
@@ -10,7 +12,8 @@ router = APIRouter()
 
 
 def get_user_service() -> UserService:
-    return UserService(UserRepository(get_firestore()))
+    db = get_firestore()
+    return UserService(UserRepository(db), ProgressRepository(db), ChallengeRepository(db))
 
 
 @router.post("/sync", response_model=SyncResponse)

@@ -1,7 +1,6 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from datetime import datetime
-from app.models.challenge import ChallengeType
 from app.schemas.common import ApiResponse
 
 
@@ -11,8 +10,7 @@ class DailyProgressData(BaseModel):
     date: str                           # "YYYY-MM-DD"
     streak_maintained: bool
     access_attempts_count: int
-    challenges_by_type: dict            # {"video": 2, "article": 1}
-
+    completed_challenges_count: int
 
 class ProgressReportData(BaseModel):
     # Account level
@@ -32,7 +30,6 @@ class ProgressReportData(BaseModel):
 
 class AttemptData(BaseModel):
     access_attempts_count: int          # updated count for today
-    current_streak: int                 # updated streak (0 if first attempt today)
 
 
 # ── Composed Responses ────────────────────────────────────────────────────────

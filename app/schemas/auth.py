@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from app.schemas.common import ApiResponse
-from app.schemas.user import ProfileData, AccountStatsData
+from app.schemas.user import ProfileData
 
 # ── Requests ──────────────────────────────────────────────────────────────────
 
@@ -14,8 +14,6 @@ class SyncRequest(BaseModel):
 class SyncData(BaseModel):
     is_new_user: bool
     profile : ProfileData
-    account_stats : AccountStatsData
-
 
 # ── Composed Responses ────────────────────────────────────────────────────────
 
