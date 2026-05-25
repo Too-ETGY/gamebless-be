@@ -58,6 +58,16 @@ class ChatService:
         logger.info(f"Auto-created first session for user {uid}")
         return self._to_session_data(doc)
 
+    def clear_active_session(self, uid: str) -> SessionData:
+        """
+        Clears the active session by creating a new empty session.
+        Since get_or_create_active_session always picks the most recent,
+        this effectively resets the chat history.
+        """
+        doc = self.repo.create_session(uid, title=None)
+        logger.info(f"Cleared session by creating new session for user {uid}")
+        return self._to_session_data(doc)
+
     # ── Messages ──────────────────────────────────────────────────────────────
 
     def get_messages(self, uid: str, session_id: str) -> MessageListData:

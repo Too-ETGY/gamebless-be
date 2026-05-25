@@ -203,13 +203,22 @@
   "data": {
     "challenges": [
       {
-        "task_id": "daily_login",
-        "title": "Login Hari Ini",
-        "description": "Buka aplikasi hari ini",
-        "points": 10,
-        "is_completed": true
+        "task_id": "menara_eiffel_tumbuh",
+        "type": "funfact",
+        "point_value": 25,
+        "title": "Menara Eiffel yang Tumbuh",
+        "description": "Menara Eiffel di Paris ternyata \"tumbuh\" setiap musim panas...",
+        "image_url": "https://resort.co.id/menara-eiffel-destinasi-wisata-terpopuler-di-prancis/",
+        "video_url": null,
+        "article_url": null,
+        "category": null,
+        "question": "Dimana letak menara eiffel",
+        "options": ["Pogung", "Klebengan", "Paris"],
+        "correct_answers": 2,
+        "is_completed": false
       }
-    ]
+    ],
+    "total": 1
   }
 }
 ```
@@ -222,7 +231,7 @@
 
 **Header:** `Authorization: Bearer <firebase_id_token>`
 
-**Path Param:** `task_id` (string) — ID challenge, misal: `"daily_login"`
+**Path Param:** `task_id` (string) — ID challenge, misal: `"menara_eiffel_tumbuh"`
 
 **Response `200`:**
 ```json
@@ -230,9 +239,9 @@
   "status": "success",
   "message": "Challenge completed",
   "data": {
-    "task_id": "daily_login",
-    "points_awarded": 10,
-    "total_points": 160
+    "task_id": "menara_eiffel_tumbuh",
+    "points_awarded": 25,
+    "total_points": 185
   }
 }
 ```
@@ -250,13 +259,16 @@
   "status": "success",
   "message": "Challenge history fetched",
   "data": {
-    "total_points": 160,
-    "history": [
+    "completed_challenges": [
       {
-        "task_id": "daily_login",
+        "task_id": "menara_eiffel_tumbuh",
+        "type": "funfact",
+        "points_awarded": 25,
         "completed_at": "2025-01-10T08:00:00"
       }
-    ]
+    ],
+    "total_points": 185,
+    "total_completed": 1
   }
 }
 ```

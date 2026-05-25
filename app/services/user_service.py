@@ -29,12 +29,13 @@ class UserService:
                 profile=self._to_profile(uid, existing["profile"]),
             )
         now = datetime.now(timezone.utc)
-        doc = self.repo.create(uid, email, avatar_url=None, join_date=now)
+        doc = self.user_repo.create(uid, email)
         logger.info(f"New user created: {uid}")
+        full_doc = self.user_repo.get_by_id(uid)
         return SyncData(
             is_new_user=True,
-            profile=self._to_profile(uid, doc["profile"]),
-            account_stats=AccountStatsData(**doc['account_stats']),
+            profile=self._to_profile(uid, full_doc["profile"]),
+            account_stats=self._compute_stats(uid, full_doc["profile"]),
         )
 
     def get_me(self, uid: str) -> MeData:

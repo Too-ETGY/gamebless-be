@@ -34,6 +34,18 @@ async def get_active_session(
     return success_response(data=session, message="Active session ready")
 
 
+@router.delete("/session", response_model=ApiResponse)
+async def clear_session(
+    current_user: dict = Depends(get_current_user),
+    service: ChatService = Depends(get_chat_service),
+):
+    """
+    Clears the current chat history by creating a new session.
+    """
+    session = service.clear_active_session(current_user["uid"])
+    return success_response(data=session, message="Session cleared")
+
+
 @router.post("/session/messages", response_model=SendMessageResponse)
 async def send_message(
     body: SendMessageRequest,
