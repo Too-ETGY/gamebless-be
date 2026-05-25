@@ -1,8 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from app.dependencies import get_current_user
-from app.db.firebase import get_firestore
-from app.db.repositories.chat_repo import ChatRepository
-from app.services.chat_service import ChatService
+from app.services.chat_service import ChatService, get_chat_service
 from app.schemas.chat import (
     SendMessageRequest,
     SendMessageResponse,
@@ -11,12 +9,9 @@ from app.schemas.chat import (
 )
 from app.schemas.common import ApiResponse
 from app.core.response import success_response
+from app.db import vector_db
 
 router = APIRouter()
-
-
-def get_chat_service() -> ChatService:
-    return ChatService(ChatRepository(get_firestore()))
 
 
 @router.get("/session", response_model=ApiResponse)
@@ -25,10 +20,9 @@ async def get_active_session(
     service: ChatService = Depends(get_chat_service),
 ):
     """
-    Frontend calls this on app open.
-    Returns the current active session (creates one if first time).
-    Frontend stores the session_id and uses it for all message calls.
-    User never sees or manages sessions manually.
+    Frontend calls on app open.
+    Returns active session — creates one if first time.
+    Handles age-based rotation silently.
     """
     session = service.get_or_create_active_session(current_user["uid"])
     return success_response(data=session, message="Active session ready")
@@ -37,23 +31,26 @@ async def get_active_session(
 @router.post("/session/messages", response_model=SendMessageResponse)
 async def send_message(
     body: SendMessageRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
     """
-    Sends a user message and returns AI response.
-    Uses the active session — frontend passes session_id from /chat/session.
-
-    Flow:
-    1. Validate session belongs to user
-    2. Save user message
-    3. Build context from recent history + summary
-    4. Call Gemini with psychologist system prompt
-    5. Save and return AI response
-    6. Silently rotate session if threshold hit
+    Send message, get AI response with optional challenge recommendation.
+    Embeds messages for RAG in background.
     """
-    session = service.get_or_create_active_session(current_user["uid"])
-    data = service.send_message(current_user["uid"], session.session_id, body.content)
+    uid = current_user["uid"]
+    session = service.get_or_create_active_session(uid)
+    data = service.send_message(uid, session.session_id, body.content)
+
+    # Embed messages for RAG in background
+    background_tasks.add_task(
+        service._embed_messages_background,
+        uid,
+        data.user_message.model_dump(),
+        data.ai_message.model_dump(),
+    )
+
     return success_response(data=data, message="Message sent")
 
 
@@ -63,10 +60,10 @@ async def get_messages(
     service: ChatService = Depends(get_chat_service),
 ):
     """
-    Returns full message history for the active session.
-    Frontend calls this to restore conversation on app open.
-    has_summary tells frontend whether older messages were summarized.
+    Returns visible message history (system messages excluded).
+    Frontend calls on app open to restore conversation.
     """
-    session = service.get_or_create_active_session(current_user["uid"])
-    data = service.get_messages(current_user["uid"], session.session_id)
+    uid = current_user["uid"]
+    session = service.get_or_create_active_session(uid)
+    data = service.get_messages(uid, session.session_id)
     return success_response(data=data, message="Messages fetched")

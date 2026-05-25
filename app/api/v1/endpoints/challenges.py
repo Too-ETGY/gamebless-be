@@ -5,8 +5,12 @@ from app.db.repositories.challenge_repo import ChallengeRepository
 from app.db.repositories.progress_repo import ProgressRepository
 from app.db.repositories.user_repo import UserRepository
 from app.services.challenge_service import ChallengeService
-from app.schemas.challenge import ChallengeResponse, AllChallengesResponse, CompleteChallengeResponse, ChallengeHistoryResponse
-from app.models.challenge import ChallengeType
+from app.schemas.challenge import (
+    AllChallengesResponse,
+    ChallengeTaskResponse,
+    CompleteChallengeResponse,
+    ChallengeHistoryResponse,
+)
 from app.core.response import success_response
 
 router = APIRouter()
@@ -22,30 +26,40 @@ async def get_all_challenges(
     current_user: dict = Depends(get_current_user),
     service: ChallengeService = Depends(get_challenge_service),
 ):
-    """
-    Returns all challenges marked with is_completed based on today's progress.
-    """
     data = service.get_all(current_user["uid"])
     return success_response(data=data, message="Challenges fetched")
 
-@router.get("/{task_id}/", response_model=ChallengeResponse)
-async def get_challenges(
+
+@router.get("/history", response_model=ChallengeHistoryResponse)
+async def get_challenge_history(
+    current_user: dict = Depends(get_current_user),
+    service: ChallengeService = Depends(get_challenge_service),
+):
+    data = service.get_history(current_user["uid"])
+    return success_response(data=data, message="Challenge history fetched")
+
+
+@router.get("/type/{challenge_type}", response_model=AllChallengesResponse)
+async def get_challenges_by_type(
+    challenge_type: str,
+    current_user: dict = Depends(get_current_user),
+    service: ChallengeService = Depends(get_challenge_service),
+):
+    """Returns challenges filtered by type: video | article | funfact"""
+    data = service.get_by_type(current_user["uid"], challenge_type)
+    return success_response(data=data, message=f"{challenge_type} challenges fetched")
+
+
+@router.get("/{task_id}", response_model=ChallengeTaskResponse)
+async def get_challenge_by_id(
     task_id: str,
     current_user: dict = Depends(get_current_user),
     service: ChallengeService = Depends(get_challenge_service),
 ):
+    """Returns a single challenge with is_completed status."""
     data = service.get_by_id(current_user["uid"], task_id)
-    return success_response(data=data, message="Challenges {task_id} fetched")
+    return success_response(data=data, message="Challenge fetched")
 
-
-@router.get("/by-type/{type}", response_model=AllChallengesResponse)
-async def get_challenges_by_type(
-    type: ChallengeType,
-    current_user: dict = Depends(get_current_user),
-    service: ChallengeService = Depends(get_challenge_service),
-):
-    data = service.get_by_type(current_user["uid"], type)
-    return success_response(data=data, message="Challenges fetced by type")
 
 @router.post("/{task_id}/complete", response_model=CompleteChallengeResponse)
 async def complete_challenge(
@@ -53,21 +67,5 @@ async def complete_challenge(
     current_user: dict = Depends(get_current_user),
     service: ChallengeService = Depends(get_challenge_service),
 ):
-    """
-    Marks a challenge as completed.
-    Deduplication check prevents point farming.
-    Awards points to account_stats.total_points atomically.
-    """
     data = service.complete(current_user["uid"], task_id)
     return success_response(data=data, message="Challenge completed")
-
-@router.get("/history", response_model=ChallengeHistoryResponse)
-async def get_challenge_history(
-    current_user: dict = Depends(get_current_user),
-    service: ChallengeService = Depends(get_challenge_service),
-):
-    """
-    All completed challenges across all time + total_points from account_stats.
-    """
-    data = service.get_history(current_user["uid"])
-    return success_response(data=data, message="Challenge history fetched")

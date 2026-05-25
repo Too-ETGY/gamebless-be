@@ -54,8 +54,16 @@ class ProgressService:
         total_challenges_by_type: dict[str, int] = {}
 
         for c in completed:
-            d = c.get("completed_date") or c.get("completed_at", "")[:10]
-            completed_by_date[d] = completed_by_date.get(d, 0) + 1
+            d_obj = c.get("completed_date") or c.get("completed_at")
+            if hasattr(d_obj, "isoformat"):
+                d = d_obj.isoformat()[:10]
+            elif isinstance(d_obj, str):
+                d = d_obj[:10]
+            else:
+                d = str(d_obj)[:10] if d_obj else ""
+                
+            if d:
+                completed_by_date[d] = completed_by_date.get(d, 0) + 1
             ctype = c.get("type", "unknown")
             total_challenges_by_type[ctype] = total_challenges_by_type.get(ctype, 0) + 1
 

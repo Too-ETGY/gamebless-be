@@ -145,3 +145,4 @@ uvicorn.log
 
 # Other
 chroma_db/
+get_token.bat
