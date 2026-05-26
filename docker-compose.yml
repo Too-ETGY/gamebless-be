@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_NAME=GameBless Be
+      - DEBUG=true
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - FIREBASE_CREDENTIALS_PATH=/app/firebase-credentials.json
+      - CHROMA_DB_PATH=/app/chroma_db
+    volumes:
+      # Mount the firebase credentials file into the container locally so it's not baked into the image
+      - ./firebase-credentials.json:/app/firebase-credentials.json:ro
+      # Mount chroma_db to persist local runs (optional, since it's already built inside the image, but helpful for dev updates)
+      - ./chroma_db:/app/chroma_db
+    restart: always
