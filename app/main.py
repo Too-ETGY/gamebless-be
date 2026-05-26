@@ -24,7 +24,11 @@ async def lifespan(app: FastAPI):
     init_firebase()
     logger.info("Firebase Admin SDK successfully initialized.")
 
-    # 2. ChromaDB warm-up
+    # 2. Redis
+    from app.db.redis_client import init_redis, close_redis
+    await init_redis(settings.REDIS_URL)
+
+    # 3. ChromaDB warm-up
     try:
         from app.db.vector_db import get_collection, embed_domain, BLOCKED_DOMAINS_COLLECTION
 
@@ -49,6 +53,7 @@ async def lifespan(app: FastAPI):
 
     # ── SHUTDOWN ──────────────────────────────────────────────────────────────
     logger.info("Shutting down Gamebless API...")
+    await close_redis()
 
 
 app = FastAPI(title=settings.APP_NAME, version="1.0.0", lifespan=lifespan)

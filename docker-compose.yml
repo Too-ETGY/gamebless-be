@@ -1,6 +1,12 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    restart: always
+
   api:
     build:
       context: .
@@ -13,6 +19,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - FIREBASE_CREDENTIALS_PATH=/app/firebase-credentials.json
       - CHROMA_DB_PATH=/app/chroma_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
     volumes:
       # Mount the firebase credentials file into the container locally so it's not baked into the image
       - ./firebase-credentials.json:/app/firebase-credentials.json:ro

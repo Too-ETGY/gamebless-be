@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
 from app.dependencies import get_current_user
 from app.services.chat_service import ChatService, get_chat_service
+from app.utils.limiter import RateLimiter
 from app.schemas.chat import (
     SendMessageRequest,
     SendMessageResponse,
@@ -39,7 +40,7 @@ async def clear_session(
     return success_response(data=session, message="Session cleared")
 
 
-@router.post("/session/messages", response_model=SendMessageResponse)
+@router.post("/session/messages", response_model=SendMessageResponse, dependencies=[Depends(RateLimiter(limit=10, window=60, key_type="user"))])
 async def send_message(
     body: SendMessageRequest,
     background_tasks: BackgroundTasks,

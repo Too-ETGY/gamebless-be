@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from app.db.firebase import get_firestore
 from app.db.repositories.domain_repo import DomainRepository
 from app.services.domain_service import check_domain, report_domain
+from app.utils.limiter import RateLimiter
 from app.schemas.domain import (
     DomainCheckResponse,
     DomainReportResponse,
@@ -19,7 +20,7 @@ def get_domain_repo() -> DomainRepository:
     return DomainRepository(db)
 
 
-@router.get("/check", response_model=DomainCheckResponse)
+@router.get("/check", response_model=DomainCheckResponse, dependencies=[Depends(RateLimiter(limit=60, window=60, key_type="ip"))])
 async def check_domain_endpoint(
     url: str = Query(..., description="URL to check e.g. bet-site.com"),
     repo: DomainRepository = Depends(get_domain_repo),
@@ -33,7 +34,7 @@ async def check_domain_endpoint(
 
     No auth required. No scraping — must be fast.
     """
-    is_blocked = check_domain(url, repo)
+    is_blocked = await check_domain(url, repo)
     return success_response(
         data=DomainCheckData(url=url, is_blocked=is_blocked),
         message="Domain checked successfully",

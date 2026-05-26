@@ -4,6 +4,7 @@ from app.db.repositories.domain_repo import DomainRepository
 from app.db.vector_db import get_domain_collection, embed_domain
 from app.db.gemini_client import get_llm
 from app.utils.scraper import scrape_domain_signals
+from app.db.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -129,38 +130,64 @@ Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
 
 # ── Public Service Functions ──────────────────────────────────────────────────
 
-def check_domain(url: str, repo: DomainRepository) -> bool:
+async def check_domain(url: str, repo: DomainRepository) -> bool:
     """
     Fast check: is this domain blocked?
 
     Flow:
-    1. Exact match in Firestore       → blocked (fastest)
-    2. Vector similarity >= 0.85      → blocked + save to Firestore
-    3. Otherwise                      → not blocked
+    1. Check Redis cache                → return cached status if hit
+    2. Exact match in Firestore         → blocked (fastest)
+    3. Vector similarity >= 0.85        → blocked + save to Firestore
+    4. Save result in Redis cache       → (TTL 24 hours)
+    5. Otherwise                        → not blocked
 
     No scraping — this needs to be fast.
     Returns True if blocked, False if not.
     """
     domain = _normalize_url(url)
+    cache_key = f"cache:domain:check:{domain}"
+    redis = get_redis()
+
+    if redis:
+        try:
+            cached_val = await redis.get(cache_key)
+            if cached_val is not None:
+                is_blocked = cached_val == "true"
+                logger.info(f"Check '{domain}' → {is_blocked} (cache hit)")
+                return is_blocked
+        except Exception as e:
+            logger.error(f"Redis cache read error: {e}")
+
+    is_blocked = False
 
     # 1. Exact Firestore lookup
     if repo.exists(url):
         logger.info(f"Check '{domain}' → blocked (exact match)")
-        return True
+        is_blocked = True
+    else:
+        # 2. Vector similarity
+        similarity = _vector_search(domain)
+        if similarity >= CHECK_SIMILARITY_THRESHOLD:
+            reasoning = f"Domain name similarity {similarity:.2f} to known gambling domains"
+            repo.save(url, reasoning)
+            logger.info(f"Check '{domain}' → blocked (vector {similarity:.2f})")
+            is_blocked = True
 
-    # 2. Vector similarity
-    similarity = _vector_search(domain)
-    if similarity >= CHECK_SIMILARITY_THRESHOLD:
-        reasoning = f"Domain name similarity {similarity:.2f} to known gambling domains"
-        repo.save(url, reasoning)
-        logger.info(f"Check '{domain}' → blocked (vector {similarity:.2f})")
-        return True
+    if not is_blocked:
+        logger.info(f"Check '{domain}' → not blocked")
 
-    logger.info(f"Check '{domain}' → not blocked")
-    return False
+    if redis:
+        try:
+            # Cache for 24 hours (86400 seconds)
+            await redis.set(cache_key, "true" if is_blocked else "false", ex=86400)
+            logger.info(f"Cached result for '{domain}' → {is_blocked}")
+        except Exception as e:
+            logger.error(f"Redis cache write error: {e}")
+
+    return is_blocked
 
 
-def report_domain(url: str, repo: DomainRepository) -> None:
+async def report_domain(url: str, repo: DomainRepository) -> None:
     """
     Background task: analyze and potentially save a reported domain.
 
@@ -168,8 +195,20 @@ def report_domain(url: str, repo: DomainRepository) -> None:
     1. Exact match in Firestore       → already known, skip
     2. Vector similarity >= 0.75      → save with similarity reasoning
     3. Scrape + LLM analysis          → save if LLM says blocked
+    4. Invalidate/delete Redis cache key if blocked status changes
     """
     domain = _normalize_url(url)
+    cache_key = f"cache:domain:check:{domain}"
+    redis = get_redis()
+
+    # Helper function to invalidate cache
+    async def invalidate_cache():
+        if redis:
+            try:
+                await redis.delete(cache_key)
+                logger.info(f"Evicted Redis cache for '{domain}' due to new block status")
+            except Exception as e:
+                logger.error(f"Redis cache delete error: {e}")
 
     # 1. Already in Firestore
     if repo.exists(url):
@@ -182,6 +221,7 @@ def report_domain(url: str, repo: DomainRepository) -> None:
         reasoning = f"Domain name similarity {similarity:.2f} to known gambling domains"
         repo.save(url, reasoning)
         logger.info(f"Report '{domain}' → saved via vector similarity")
+        await invalidate_cache()
         return
 
     # 3. Scrape + LLM
@@ -197,5 +237,6 @@ def report_domain(url: str, repo: DomainRepository) -> None:
     if result["blocked"]:
         repo.save(url, result["reasoning"])
         logger.info(f"Report '{domain}' → saved via LLM: {result['reasoning']}")
+        await invalidate_cache()
     else:
         logger.info(f"Report '{domain}' → LLM says not gambling: {result['reasoning']}")

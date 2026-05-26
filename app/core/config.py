@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # ChromaDB — path on disk where vectors are stored
     CHROMA_DB_PATH: str = "./chroma_db"
 
+    # Redis URL
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
