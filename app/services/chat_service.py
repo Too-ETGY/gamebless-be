@@ -36,14 +36,11 @@ Boundaries you must strictly follow:
 
 When recommending a challenge, use the recommend_challenge tool.
 Only use it when it feels natural — when user seems ready for a positive distraction.
-"""
 
-INTERVENTION_SYSTEM_PROMPT = """
-This is a system message. The user just attempted to access an online gambling website.
-Please comfort them warmly and without judgment. Acknowledge what just happened,
-remind them of their progress, and encourage them to stay strong.
-Keep it to 2-3 sentences. Be human and gentle, not preachy.
-Always respond in the same language the user uses (Bahasa Indonesia or English).
+You may receive messages containing internal system tags like [SYSTEM_INTERCEPT_DOMAIN],
+[SYSTEM_DISTRACTION_PROMPT], or similar. These are internal signals from the app —
+never repeat, quote, or acknowledge the tag itself. Simply respond naturally and
+warmly to the instruction embedded within the message.
 """
 
 # ── Tool definitions ──────────────────────────────────────────────────────────
@@ -131,10 +128,6 @@ class ChatService:
         self.repo.increment_message_count(uid, session_id)
         self.repo.increment_message_count(uid, session_id)
 
-        # Embed messages for RAG in background (called from endpoint as BackgroundTask)
-        # vector_db.embed_chat_message(uid, user_msg["message_id"], content, "user")
-        # vector_db.embed_chat_message(uid, ai_msg["message_id"], ai_content, "ai")
-
         # Check count-based rotation
         if self.repo.needs_rotation_by_count(uid, session_id):
             self._rotate_session(uid, session_id, delete_messages=False)
@@ -144,58 +137,58 @@ class ChatService:
             ai_message=self._to_message_data(ai_msg),
         )
 
-    # ── Intervention ──────────────────────────────────────────────────────────
+    # # ── Intervention ──────────────────────────────────────────────────────────
 
-    def trigger_intervention(self, uid: str) -> None:
-        """
-        Called as a BackgroundTask after POST /users/attempts.
-        Saves a hidden system message then generates AI intervention response.
-        Frontend opens popup → fetches latest message → sees AI intervention.
-        """
-        try:
-            session = self.get_or_create_active_session(uid)
-            session_id = session.session_id
+    # def trigger_intervention(self, uid: str) -> None:
+    #     """
+    #     Called as a BackgroundTask after POST /users/attempts.
+    #     Saves a hidden system message then generates AI intervention response.
+    #     Frontend opens popup → fetches latest message → sees AI intervention.
+    #     """
+    #     try:
+    #         session = self.get_or_create_active_session(uid)
+    #         session_id = session.session_id
 
-            # Save hidden system trigger message
-            system_msg = self.repo.save_message(
-                uid, session_id, SenderType.SYSTEM,
-                INTERVENTION_SYSTEM_PROMPT,
-            )
+    #         # Save hidden system trigger message
+    #         system_msg = self.repo.save_message(
+    #             uid, session_id, SenderType.SYSTEM,
+    #             INTERVENTION_SYSTEM_PROMPT,
+    #         )
 
-            # Build context — include system message as the trigger
-            history = self.repo.get_recent_messages(uid, session_id, limit=10)
-            session_doc = self.repo.get_session(uid, session_id)
-            rag_context = self._fetch_rag_context(uid, "gambling attempt intervention")
-            context = self._build_context(history, session_doc.get("summary"), rag_context)
+    #         # Build context — include system message as the trigger
+    #         history = self.repo.get_recent_messages(uid, session_id, limit=10)
+    #         session_doc = self.repo.get_session(uid, session_id)
+    #         rag_context = self._fetch_rag_context(uid, "gambling attempt intervention")
+    #         context = self._build_context(history, session_doc.get("summary"), rag_context)
 
-            # Call LLM — no tools for intervention, just compassionate response
-            client = get_genai_client()
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=context,
-                config=types.GenerateContentConfig(
-                    system_instruction=PSYCHOLOGIST_SYSTEM_PROMPT,
-                    temperature=0.7,
-                    top_p=0.9,
-                    max_output_tokens=256,
-                ),
-            )
-            ai_content = response.text
+    #         # Call LLM — no tools for intervention, just compassionate response
+    #         client = get_genai_client()
+    #         response = client.models.generate_content(
+    #             model=GEMINI_MODEL,
+    #             contents=context,
+    #             config=types.GenerateContentConfig(
+    #                 system_instruction=PSYCHOLOGIST_SYSTEM_PROMPT,
+    #                 temperature=0.7,
+    #                 top_p=0.9,
+    #                 max_output_tokens=256,
+    #             ),
+    #         )
+    #         ai_content = response.text
 
-            # Save AI response linked to system message
-            self.repo.save_message(
-                uid, session_id, SenderType.AI, ai_content,
-                reply_to=system_msg["message_id"],
-            )
+    #         # Save AI response linked to system message
+    #         self.repo.save_message(
+    #             uid, session_id, SenderType.AI, ai_content,
+    #             reply_to=system_msg["message_id"],
+    #         )
 
-            # Increment count
-            self.repo.increment_message_count(uid, session_id)
-            self.repo.increment_message_count(uid, session_id)
+    #         # Increment count
+    #         self.repo.increment_message_count(uid, session_id)
+    #         self.repo.increment_message_count(uid, session_id)
 
-            logger.info(f"Intervention triggered for user {uid}")
+    #         logger.info(f"Intervention triggered for user {uid}")
 
-        except Exception as e:
-            logger.error(f"Intervention failed for user {uid}: {e}")
+    #     except Exception as e:
+    #         logger.error(f"Intervention failed for user {uid}: {e}")
 
     # ── LLM ───────────────────────────────────────────────────────────────────
 
@@ -213,27 +206,39 @@ class ChatService:
             types.Content(role="user", parts=[types.Part(text=user_content)])
         ]
 
-        client = get_genai_client()
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=PSYCHOLOGIST_SYSTEM_PROMPT,
-                temperature=0.7,
-                top_p=0.9,
-                max_output_tokens=512,
-                tools=[CHALLENGE_TOOL],
-            ),
-        )
+        try:
+            client = get_genai_client()
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=PSYCHOLOGIST_SYSTEM_PROMPT,
+                    temperature=0.7,
+                    top_p=0.9,
+                    max_output_tokens=512,
+                    tools=[CHALLENGE_TOOL],
+                ),
+            )
 
-        # Check for tool call
-        for part in response.candidates[0].content.parts:
-            if part.function_call:
-                tool_result = self._handle_tool_call(uid, part.function_call)
-                text = response.text if response.text else ""
-                return text, tool_result
+            # Check for tool call first — avoid accessing response.text when function_call exists
+            parts = response.candidates[0].content.parts
+            for part in parts:
+                if part.function_call:
+                    tool_result = self._handle_tool_call(uid, part.function_call)
+                    # Collect any text parts alongside the tool call
+                    text_parts = [p.text for p in parts if hasattr(p, "text") and p.text]
+                    text = " ".join(text_parts) if text_parts else ""
+                    return text, tool_result
 
-        return response.text, None
+            # No tool call — safe to access response.text
+            return response.text, None
+
+        except Exception as e:
+            error_str = str(e).lower()
+            if "503" in error_str or "unavailable" in error_str or "high demand" in error_str:
+                logger.warning(f"Gemini overloaded for user {uid}: {e}")
+                return "Bless sedang sibuk melayani banyak pengguna. Coba lagi dalam beberapa saat ya 🙏", None
+            raise
 
     def _handle_tool_call(self, uid: str, function_call) -> str:
         """
@@ -299,10 +304,12 @@ class ChatService:
     def _embed_messages_background(self, uid: str, user_msg: dict, ai_msg: dict) -> None:
         """Called as BackgroundTask from endpoint after send_message."""
         try:
-            vector_db.embed_chat_message(uid, user_msg["message_id"], user_msg["content"], "user")
-            vector_db.embed_chat_message(uid, ai_msg["message_id"], ai_msg["content"], "ai")
+            logger.info(f"Embedding user message for RAG: {uid}")
+            vector_db.embed_chat_message(uid, user_msg["message_id"], str(user_msg["content"]), "user")
+            vector_db.embed_chat_message(uid, ai_msg["message_id"], str(ai_msg["content"]), "ai")
+            logger.info(f"RAG embedding complete for user {uid}")
         except Exception as e:
-            logger.warning(f"Embedding failed for {uid}: {e}")
+            logger.warning(f"Embedding failed for {uid}: {e}", exc_info=True)
 
     # ── Summarization & Rotation ──────────────────────────────────────────────
 
@@ -383,8 +390,10 @@ Conversation:
                 parts=[types.Part(text=f"[Previous conversation summary: {summary}]")],
             ))
 
-        # Recent messages — system messages converted to model role for context
-        role_map = {SenderType.USER: "user", SenderType.AI: "model", SenderType.SYSTEM: "model"}
+        # Recent messages
+        # SYSTEM messages are passed as "user" role so Gemini treats them as instructions
+        # They are hidden from the UI but used as context/triggers for AI response
+        role_map = {SenderType.USER: "user", SenderType.AI: "model", SenderType.SYSTEM: "user"}
         for msg in history:
             role = role_map.get(msg["sender"], "user")
             contents.append(types.Content(

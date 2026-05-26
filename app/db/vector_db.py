@@ -3,12 +3,13 @@ import pickle
 import os
 from app.core.config import settings
 import logging
+from app.db.gemini_client import get_genai_client
+from google.genai import types as genai_types
 
 logger = logging.getLogger(__name__)
 
 _client = None
 _vectorizer = None
-_embedding_model = None
 
 # ── Collection names ──────────────────────────────────────────────────────────
 BLOCKED_DOMAINS_COLLECTION = "blocked_domains"
@@ -18,15 +19,17 @@ USER_CONTEXT_COLLECTION = "user_context"
 
 VECTORIZER_PATH = "./chroma_db/vectorizer.pkl"
 
+# Nama model resmi untuk Gemini Embedding v1 (Text-only)
+EMBEDDING_MODEL = "gemini-embedding-001"
 
-# ── Client ────────────────────────────────────────────────────────────────────
 
 def get_chroma_client() -> chromadb.Client:
-    global _client
-    if _client is None:
-        _client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
+    global _client_chroma
+    if '_client_chroma' not in globals() or _client_chroma is None:
+        _client_chroma = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
         logger.info(f"ChromaDB initialized at {settings.CHROMA_DB_PATH}")
-    return _client
+    return _client_chroma
+
 
 def get_collection(name: str) -> chromadb.Collection:
     client = get_chroma_client()
@@ -39,7 +42,7 @@ def get_collection(name: str) -> chromadb.Collection:
         )
 
 
-# ── Domain: TF-IDF vectorizer (no API, used for blocked_domains) ──────────────
+# ── Domain: TF-IDF vectorizer (Murni Lokal, Tidak Menggunakan API) ─────────────
 
 def get_domain_collection() -> chromadb.Collection:
     global _collection_domain
@@ -61,27 +64,45 @@ def get_vectorizer():
 
 
 def embed_domain(domain: str) -> list[float]:
-    """Embed domain string using TF-IDF vectorizer. Fast, no API needed."""
+    """Embed domain string menggunakan TF-IDF vectorizer. Cepat dan gratis."""
     vectorizer = get_vectorizer()
     vector = vectorizer.transform([domain])
     return vector.toarray()[0].tolist()
 
 
-# ── Chat/Challenges: sentence-transformers (multilingual, free) ───────────────
-
-def _get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        from sentence_transformers import SentenceTransformer
-        _embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-        logger.info("Sentence-transformer embedding model loaded")
-    return _embedding_model
-
+# ── Modul Integrasi Google-GenAI SDK (Menggunakan text-embedding-004) ──────────
 
 def embed_text(text: str) -> list[float]:
-    """Embed text using multilingual sentence-transformers. Supports Bahasa Indonesia + English."""
-    model = _get_embedding_model()
-    return model.encode(text).tolist()
+    """
+    Embed teks dokumen menggunakan Google GenAI SDK (text-embedding-004).
+    Menggunakan task_type RETRIEVAL_DOCUMENT untuk penyimpanan basis data.
+    """
+    client = get_genai_client()
+    response = client.models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text,
+        config=genai_types.EmbedContentConfig(
+            task_type="RETRIEVAL_DOCUMENT",
+        ),
+    )
+    # SDK baru mengembalikan objek dengan struktur .embeddings[0].values
+    return response.embeddings[0].values
+
+
+def embed_query(text: str) -> list[float]:
+    """
+    Embed kueri pencarian menggunakan Google GenAI SDK (text-embedding-004).
+    Menggunakan task_type RETRIEVAL_QUERY untuk akurasi pencarian kemiripan.
+    """
+    client = get_genai_client()
+    response = client.models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text,
+        config=genai_types.EmbedContentConfig(
+            task_type="RETRIEVAL_QUERY",
+        ),
+    )
+    return response.embeddings[0].values
 
 
 # ── Chat Messages ─────────────────────────────────────────────────────────────
@@ -101,7 +122,7 @@ def search_chat_messages(uid: str, query: str, n_results: int = 3) -> list[str]:
     if collection.count() == 0:
         return []
     results = collection.query(
-        query_embeddings=[embed_text(query)],
+        query_embeddings=[embed_query(query)],
         n_results=n_results,
         where={"uid": uid},
         include=["documents"],
@@ -152,7 +173,7 @@ def search_challenges(query: str, challenge_type: str | None = None, n_results: 
         return []
     where = {"type": challenge_type} if challenge_type else None
     results = collection.query(
-        query_embeddings=[embed_text(query)],
+        query_embeddings=[embed_query(query)],
         n_results=n_results,
         where=where,
         include=["documents", "metadatas", "ids"],

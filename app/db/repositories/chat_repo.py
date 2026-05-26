@@ -48,11 +48,11 @@ class ChatRepository:
         return {"session_id": doc.id, **doc.to_dict()}
 
     def get_active_session(self, uid: str) -> dict | None:
-        """Returns most recent active session."""
+        """Returns the active session. No order_by to avoid composite index requirement."""
+        from google.cloud.firestore_v1.base_query import FieldFilter
         docs = (
             self._sessions_ref(uid)
-            .where("is_active", "==", True)
-            .order_by("updated_at", direction="DESCENDING")
+            .where(filter=FieldFilter("is_active", "==", True))
             .limit(1)
             .stream()
         )

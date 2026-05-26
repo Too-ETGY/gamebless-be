@@ -21,11 +21,15 @@ logger = logging.getLogger(__name__)
 
 
 def ingest():
-    # Init Firebase
-    cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
-    firebase_admin.initialize_app(cred)
+    # 1. Init Firebase Firestore
+    # Menggunakan pengecekan agar tidak crash jika firebase_admin sudah terinisialisasi di modul lain
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+        firebase_admin.initialize_app(cred)
+        
     db = firestore.client()
 
+    logger.info("Streaming challenges from Cloud Firestore...")
     docs = db.collection("challenges").stream()
     challenges = [{"task_id": doc.id, **doc.to_dict()} for doc in docs]
 
@@ -36,7 +40,14 @@ def ingest():
     logger.info(f"Found {len(challenges)} challenges in Firestore")
 
     collection = get_collection(CHALLENGE_COLLECTION)
-    existing_ids = set(collection.get()["ids"])
+    
+    # OPTIMISASI: Gunakan include=[] agar ChromaDB HANYA mengambil data ID-nya saja,
+    # menghemat pembacaan memori RAM secara signifikan daripada menarik isi dokumen mentah.
+    try:
+        existing_data = collection.get(include=[])
+        existing_ids = set(existing_data["ids"]) if existing_data and "ids" in existing_data else set()
+    except Exception:
+        existing_ids = set()
 
     to_ingest = [c for c in challenges if c["task_id"] not in existing_ids]
     logger.info(f"{len(to_ingest)} new challenges to embed ({len(existing_ids)} already stored)")
@@ -45,6 +56,7 @@ def ingest():
         logger.info("Nothing to ingest. Done.")
         return
 
+    # 2. Proses Ingest Data Menggunakan Google-GenAI SDK (via embed_challenge)
     for c in to_ingest:
         try:
             embed_challenge(

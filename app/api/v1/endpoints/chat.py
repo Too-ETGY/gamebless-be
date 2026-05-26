@@ -9,7 +9,6 @@ from app.schemas.chat import (
 )
 from app.schemas.common import ApiResponse
 from app.core.response import success_response
-from app.db import vector_db
 
 router = APIRouter()
 

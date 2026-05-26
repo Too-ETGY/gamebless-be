@@ -10,6 +10,7 @@ from app.services.chat_service import get_chat_service, ChatService
 from app.schemas.user import MeResponse, UpdateProfileRequest, UpdateProfileResponse, AttemptRequest
 from app.schemas.progress import AttemptResponse, ProgressReportResponse
 from app.core.response import success_response
+from app.db import vector_db
 
 router = APIRouter()
 
@@ -39,7 +40,6 @@ async def update_profile(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     service: UserService = Depends(get_user_service),
-    # chat_service: ChatService = Depends(get_chat_service),
 ):
     uid = current_user["uid"]
     fields = body.model_dump(exclude_none=True)
@@ -54,10 +54,8 @@ async def update_profile(
 @router.post("/attempts", response_model=AttemptResponse)
 async def record_attempt(
     body: AttemptRequest,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     progress_service: ProgressService = Depends(get_progress_service),
-    chat_service: ChatService = Depends(get_chat_service),
 ):
     """
     Called when /domains/check returns is_blocked=true.
@@ -66,9 +64,6 @@ async def record_attempt(
     """
     uid = current_user["uid"]
     result = progress_service.record_attempt(uid)
-
-    # Trigger AI intervention as background task
-    background_tasks.add_task(chat_service.trigger_intervention, uid)
 
     return success_response(data=result, message="Attempt recorded")
 
@@ -85,19 +80,29 @@ async def get_progress_report(
 # ── Background helpers ────────────────────────────────────────────────────────
 
 async def _update_user_context_embedding(uid: str, service: UserService) -> None:
-    """Rebuild user context embedding after profile update."""
+    """
+    Rebuilds user context embedding after profile update.
+    Only called from PUT /users/me — not on sync (profile is empty then).
+    """
     try:
-        from app.db import vector_db
         doc = service.user_repo.get_by_id(uid)
         if not doc:
             return
         profile = doc["profile"]
+        join_date = profile.get("join_date")
+        if hasattr(join_date, "date"):
+            join_date_str = join_date.date().isoformat()
+        elif join_date:
+            join_date_str = str(join_date)[:10]
+        else:
+            join_date_str = "unknown"
+ 
         context_text = (
-            f"User profile: email={profile.get('email')}, "
+            f"User profile: "
             f"username={profile.get('username')}, "
             f"occupation={profile.get('occupation')}, "
             f"gender={profile.get('gender')}, "
-            f"joined={profile.get('join_date', '')[:10]}"
+            f"joined={join_date_str}"
         )
         vector_db.upsert_user_context(uid, context_text)
     except Exception as e:
