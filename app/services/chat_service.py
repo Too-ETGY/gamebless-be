@@ -314,10 +314,8 @@ class ChatService:
     def _embed_messages_background(self, uid: str, user_msg: dict, ai_msg: dict) -> None:
         """Called as BackgroundTask from endpoint after send_message."""
         try:
-            logger.info(f"Embedding user message for RAG: {uid}")
             vector_db.embed_chat_message(uid, user_msg["message_id"], str(user_msg["content"]), "user")
             vector_db.embed_chat_message(uid, ai_msg["message_id"], str(ai_msg["content"]), "ai")
-            logger.info(f"RAG embedding complete for user {uid}")
         except Exception as e:
             logger.warning(f"Embedding failed for {uid}: {e}", exc_info=True)
 

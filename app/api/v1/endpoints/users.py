@@ -6,7 +6,6 @@ from app.db.repositories.progress_repo import ProgressRepository
 from app.db.repositories.challenge_repo import ChallengeRepository
 from app.services.user_service import UserService
 from app.services.progress_service import ProgressService
-from app.services.chat_service import get_chat_service, ChatService
 from app.schemas.user import MeResponse, UpdateProfileRequest, UpdateProfileResponse, AttemptRequest
 from app.schemas.progress import AttemptResponse, ProgressReportResponse
 from app.core.response import success_response
