@@ -10,8 +10,8 @@ USERS_COLLECTION = "users"
 SESSIONS_SUBCOLLECTION = "chat_sessions"
 MESSAGES_SUBCOLLECTION = "messages"
 
-# When message_count hits this, summarization should be triggered
-SUMMARY_THRESHOLD = 10
+SUMMARY_THRESHOLD = 20      # messages before summarization
+SESSION_MAX_DAYS = 7        # days before session is archived + messages deleted
 
 
 class ChatRepository:
@@ -35,31 +35,47 @@ class ChatRepository:
 
     # ── Sessions ──────────────────────────────────────────────────────────────
 
-    def create_session(self, uid: str, title: str | None) -> dict:
-        """Create a new chat session. Uses ChatSession model for construction."""
-        session = ChatSession(title=title)
-        ref = self._sessions_ref(uid).document()    # auto-generated ID
+    def create_session(self, uid: str, title: str | None = None, summary: str | None = None) -> dict:
+        session = ChatSession(title=title, summary=summary)
+        ref = self._sessions_ref(uid).document()
         ref.set(session.model_dump())
         return {"session_id": ref.id, **session.model_dump()}
 
     def get_session(self, uid: str, session_id: str) -> dict | None:
-        """Fetch session — also validates ownership since it's under users/{uid}."""
         doc = self._sessions_ref(uid).document(session_id).get()
         if not doc.exists:
             return None
         return {"session_id": doc.id, **doc.to_dict()}
 
-    def get_all_sessions(self, uid: str) -> list[dict]:
-        """List all sessions for a user, ordered by most recent."""
+    def get_active_session(self, uid: str) -> dict | None:
+        """Returns the active session. No order_by to avoid composite index requirement."""
+        from google.cloud.firestore_v1.base_query import FieldFilter
         docs = (
             self._sessions_ref(uid)
-            .order_by("updated_at", direction="DESCENDING")
+            .where(filter=FieldFilter("is_active", "==", True))
+            .limit(1)
             .stream()
         )
-        return [{"session_id": doc.id, **doc.to_dict()} for doc in docs]
+        for doc in docs:
+            return {"session_id": doc.id, **doc.to_dict()}
+        return None
+
+    def archive_session(self, uid: str, session_id: str, summary: str) -> None:
+        """Mark session as inactive and save summary."""
+        self._sessions_ref(uid).document(session_id).update({
+            "is_active": False,
+            "summary": summary,
+            "updated_at": datetime.now(timezone.utc),
+        })
+
+    def delete_messages(self, uid: str, session_id: str) -> None:
+        """Delete all messages in a session. Called only for sessions older than SESSION_MAX_DAYS."""
+        docs = self._messages_ref(uid, session_id).stream()
+        for doc in docs:
+            doc.reference.delete()
+        logger.info(f"Deleted messages for session {session_id}")
 
     def increment_message_count(self, uid: str, session_id: str) -> int:
-        """Atomically increment message_count and update updated_at. Returns new count."""
         ref = self._sessions_ref(uid).document(session_id)
         ref.update({
             "message_count": Increment(1),
@@ -67,28 +83,43 @@ class ChatRepository:
         })
         return ref.get().to_dict()["message_count"]
 
-    def save_summary(self, uid: str, session_id: str, summary: str) -> None:
-        """Save AI-generated summary and reset message_count for next threshold cycle."""
-        self._sessions_ref(uid).document(session_id).update({
-            "summary": summary,
-            "message_count": 0,         # reset so threshold triggers again after 10 more
-            "updated_at": datetime.now(timezone.utc),
-        })
+    def get_session_age_days(self, uid: str, session_id: str) -> int:
+        session = self.get_session(uid, session_id)
+        if not session:
+            return 0
+        created_at = session.get("created_at")
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        return (datetime.now(timezone.utc) - created_at).days
+
+    def needs_rotation_by_count(self, uid: str, session_id: str) -> bool:
+        session = self.get_session(uid, session_id)
+        return session.get("message_count", 0) >= SUMMARY_THRESHOLD if session else False
+
+    def needs_rotation_by_age(self, uid: str, session_id: str) -> bool:
+        return self.get_session_age_days(uid, session_id) >= SESSION_MAX_DAYS
 
     # ── Messages ──────────────────────────────────────────────────────────────
 
-    def save_message(self, uid: str, session_id: str, sender: SenderType, content: str) -> dict:
-        """Save a single message. Uses ChatMessage model for construction."""
-        message = ChatMessage(session_id=session_id, sender=sender, content=content)
-        ref = self._messages_ref(uid, session_id).document()    # auto-generated ID
+    def save_message(
+        self,
+        uid: str,
+        session_id: str,
+        sender: SenderType,
+        content: str,
+        reply_to: str | None = None,
+    ) -> dict:
+        message = ChatMessage(
+            session_id=session_id,
+            sender=sender,
+            content=content,
+            reply_to=reply_to,
+        )
+        ref = self._messages_ref(uid, session_id).document()
         ref.set(message.model_dump())
         return {"message_id": ref.id, **message.model_dump()}
 
     def get_recent_messages(self, uid: str, session_id: str, limit: int = 10) -> list[dict]:
-        """
-        Fetch the most recent N messages for RAG context building.
-        Ordered ascending so they read chronologically in the prompt.
-        """
         docs = (
             self._messages_ref(uid, session_id)
             .order_by("timestamp", direction="DESCENDING")
@@ -96,23 +127,15 @@ class ChatRepository:
             .stream()
         )
         messages = [{"message_id": doc.id, **doc.to_dict()} for doc in docs]
-        return list(reversed(messages))     # flip back to chronological
+        return list(reversed(messages))
 
     def get_all_messages(self, uid: str, session_id: str) -> list[dict]:
-        """Fetch all messages in a session chronologically."""
         docs = (
             self._messages_ref(uid, session_id)
             .order_by("timestamp")
             .stream()
         )
         return [{"message_id": doc.id, **doc.to_dict()} for doc in docs]
-
-    def needs_summarization(self, uid: str, session_id: str) -> bool:
-        """Check if session has hit the message threshold."""
-        session = self.get_session(uid, session_id)
-        if session is None:
-            return False
-        return session.get("message_count", 0) >= SUMMARY_THRESHOLD
 
 
 def get_chat_repository(db: Client) -> ChatRepository:

@@ -20,6 +20,7 @@ class SessionData(BaseModel):
     updated_at: datetime
     message_count: int
     summary: Optional[str] = None
+    is_active: bool
 
 
 class MessageData(BaseModel):
@@ -28,6 +29,7 @@ class MessageData(BaseModel):
     sender: SenderType
     content: str
     timestamp: datetime
+    reply_to: Optional[str] = None      # message_id of user message AI is answering
 
 
 class SendMessageData(BaseModel):
@@ -36,9 +38,9 @@ class SendMessageData(BaseModel):
 
 
 class MessageListData(BaseModel):
-    messages: List[MessageData]
+    messages: List[MessageData]         # system messages excluded
     total: int
-    has_summary: bool       # True if older messages were summarized
+    has_summary: bool
 
 
 # ── Composed Responses ────────────────────────────────────────────────────────
