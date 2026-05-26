@@ -29,5 +29,5 @@ RUN python -m scripts.ingest_domains
 # Expose port
 EXPOSE 8080
 
-# Start the application using uvicorn
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+# Start the application (ingest challenges first, then run uvicorn)
+CMD ["sh", "-c", "python -m scripts.ingest_challenges || echo 'Warning: Challenge ingestion skipped'; uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
