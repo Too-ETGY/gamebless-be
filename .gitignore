@@ -129,7 +129,7 @@ Thumbs.db
 
 # Firebase
 firebase/
-*.json
+firebase-credentials.json
 *.pem
 *.key
 
@@ -147,3 +147,4 @@ uvicorn.log
 # Other
 chroma_db/
 get_token.bat
+evaluation_dataset.json

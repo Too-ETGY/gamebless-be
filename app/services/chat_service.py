@@ -7,41 +7,13 @@ from app.db import vector_db
 from app.models.chat import SenderType
 from app.schemas.chat import SessionData, MessageData, SendMessageData, MessageListData
 from app.core.exceptions import AppException
-import json
 import logging
 
 logger = logging.getLogger(__name__)
 
 GEMINI_MODEL = "gemini-2.5-flash"
+from app.utils.pyschologist_prompts import PSYCHOLOGIST_SYSTEM_PROMPT
 
-PSYCHOLOGIST_SYSTEM_PROMPT = """
-You are Bless, a warm and empathetic AI companion integrated into Gamebless — an anti-online-gambling app.
-Your role is to act as a supportive psychological companion — not a licensed therapist, but a
-caring, non-judgmental presence that helps users reflect on their habits, stay motivated, and
-build healthier digital behaviors.
-
-Your responsibilities:
-- Provide emotional support and encouragement to users trying to reduce gambling behavior
-- Celebrate their progress (streaks, completed challenges, clean days)
-- Help them identify triggers and suggest healthy coping strategies
-- Guide them toward the app's daily challenges when relevant
-- Keep conversations warm, conversational, and human — avoid clinical language
-
-Boundaries you must strictly follow:
-- Never encourage, glorify, or discuss gambling strategies or sites
-- Never provide medical or psychiatric diagnoses
-- If a user expresses thoughts of self-harm, gently refer them to professional help
-- Keep responses concise — 2 to 4 sentences unless the user needs more
-- Always respond in the same language the user uses (Bahasa Indonesia or English)
-
-When recommending a challenge, use the recommend_challenge tool.
-Only use it when it feels natural — when user seems ready for a positive distraction.
-
-You may receive messages containing internal system tags like [SYSTEM_INTERCEPT_DOMAIN],
-[SYSTEM_DISTRACTION_PROMPT], or similar. These are internal signals from the app —
-never repeat, quote, or acknowledge the tag itself. Simply respond naturally and
-warmly to the instruction embedded within the message.
-"""
 
 # ── Tool definitions ──────────────────────────────────────────────────────────
 
@@ -146,60 +118,7 @@ class ChatService:
             user_message=self._to_message_data(user_msg),
             ai_message=self._to_message_data(ai_msg),
         )
-
-    # # ── Intervention ──────────────────────────────────────────────────────────
-
-    # def trigger_intervention(self, uid: str) -> None:
-    #     """
-    #     Called as a BackgroundTask after POST /users/attempts.
-    #     Saves a hidden system message then generates AI intervention response.
-    #     Frontend opens popup → fetches latest message → sees AI intervention.
-    #     """
-    #     try:
-    #         session = self.get_or_create_active_session(uid)
-    #         session_id = session.session_id
-
-    #         # Save hidden system trigger message
-    #         system_msg = self.repo.save_message(
-    #             uid, session_id, SenderType.SYSTEM,
-    #             INTERVENTION_SYSTEM_PROMPT,
-    #         )
-
-    #         # Build context — include system message as the trigger
-    #         history = self.repo.get_recent_messages(uid, session_id, limit=10)
-    #         session_doc = self.repo.get_session(uid, session_id)
-    #         rag_context = self._fetch_rag_context(uid, "gambling attempt intervention")
-    #         context = self._build_context(history, session_doc.get("summary"), rag_context)
-
-    #         # Call LLM — no tools for intervention, just compassionate response
-    #         client = get_genai_client()
-    #         response = client.models.generate_content(
-    #             model=GEMINI_MODEL,
-    #             contents=context,
-    #             config=types.GenerateContentConfig(
-    #                 system_instruction=PSYCHOLOGIST_SYSTEM_PROMPT,
-    #                 temperature=0.7,
-    #                 top_p=0.9,
-    #                 max_output_tokens=256,
-    #             ),
-    #         )
-    #         ai_content = response.text
-
-    #         # Save AI response linked to system message
-    #         self.repo.save_message(
-    #             uid, session_id, SenderType.AI, ai_content,
-    #             reply_to=system_msg["message_id"],
-    #         )
-
-    #         # Increment count
-    #         self.repo.increment_message_count(uid, session_id)
-    #         self.repo.increment_message_count(uid, session_id)
-
-    #         logger.info(f"Intervention triggered for user {uid}")
-
-    #     except Exception as e:
-    #         logger.error(f"Intervention failed for user {uid}: {e}")
-
+        
     # ── LLM ───────────────────────────────────────────────────────────────────
 
     def _generate_response(self, uid: str, session_id: str, user_content: str) -> tuple[str, str | None]:

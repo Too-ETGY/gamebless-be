@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 # ── Thresholds ────────────────────────────────────────────────────────────────
 # ChromaDB cosine distance: 0.0 = identical, 1.0 = completely different
 # So we flip it: similarity = 1 - distance
-# Report: save if similarity >= 0.70 (skip scraping, high confidence)
-# Check:  block if similarity >= 0.85 (stricter, no scraping fallback)
+# Report: save if similarity >= 0.90 (skip scraping, high confidence)
+# Check:  block if similarity >= 0.95 (stricter, no scraping fallback)
 
-REPORT_SIMILARITY_THRESHOLD = 0.70
-CHECK_SIMILARITY_THRESHOLD = 0.80
+REPORT_SIMILARITY_THRESHOLD = 0.90
+CHECK_SIMILARITY_THRESHOLD = 0.95
 
 
 def _normalize_url(url: str) -> str:
@@ -187,7 +187,7 @@ async def check_domain(url: str, repo: DomainRepository) -> bool:
     return is_blocked
 
 
-async def report_domain(url: str, repo: DomainRepository) -> None:
+async def report_domain(url: str, repo: DomainRepository) -> bool:
     """
     Background task: analyze and potentially save a reported domain.
 
@@ -213,7 +213,7 @@ async def report_domain(url: str, repo: DomainRepository) -> None:
     # 1. Already in Firestore
     if repo.exists(url):
         logger.info(f"Report '{domain}' → already in Firestore, skipping")
-        return
+        return True
 
     # 2. Vector similarity
     similarity = _vector_search(domain)
@@ -222,7 +222,7 @@ async def report_domain(url: str, repo: DomainRepository) -> None:
         repo.save(url, reasoning)
         logger.info(f"Report '{domain}' → saved via vector similarity")
         await invalidate_cache()
-        return
+        return True
 
     # 3. Scrape + LLM
     logger.info(f"Report '{domain}' → below threshold ({similarity:.2f}), scraping...")
@@ -230,7 +230,7 @@ async def report_domain(url: str, repo: DomainRepository) -> None:
 
     if signals is None:
         logger.warning(f"Report '{domain}' → scrape failed, cannot analyze")
-        return
+        return False
 
     result = _llm_analyze(signals)
 
@@ -238,5 +238,8 @@ async def report_domain(url: str, repo: DomainRepository) -> None:
         repo.save(url, result["reasoning"])
         logger.info(f"Report '{domain}' → saved via LLM: {result['reasoning']}")
         await invalidate_cache()
+        return True
     else:
         logger.info(f"Report '{domain}' → LLM says not gambling: {result['reasoning']}")
+    
+    return False
